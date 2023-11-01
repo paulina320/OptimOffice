@@ -1,58 +1,110 @@
 #include <Arduino.h>
+#include <FreeRTOS.h>
+#include <Temp_Humid.h>
 
-// put function declarations here:
-int myFunction(int, int);
-void temperature (void*parameters);
-void sound (void*parameters);
+// #define STORE_DATA
 
-int count1=0;
-int count2=0;
+#define DATA_ACQUISITION_TIME 1000
+#define DATA_STORAGE_TIME 10
 
+TaskHandle_t dataTask, wifiTask;
+SemaphoreHandle_t semaAqData, semaWifi;
 
-void setup() {
-  // put your setup code here, to run once:
-  Serial.begin(9600);
+void vAcquireData(void *pvParameters);
+void vWifiTransfer(void *pvParameters);
 
-  int result = myFunction(2, 3);
+#ifdef STORE_DATA
+  TaskHandle_t storageTask;
+  SemaphoreHandle_t semaStorage;
+  void vStorage(void *parameters);
+#endif
 
-  xTaskCreate(
-    temperature, //function name
-    "Temperature", //task name
-    1000, //stack size
-    NULL, //task parameters
-    1, //task priority
-    NULL //task handle
-  );
+void setup()
+{
+  Serial.begin(115200);
 
-    xTaskCreate(
-    sound, //function name
-    "Sound", //task name
-    1000, //stack size
-    NULL, //task parameters
-    1, //task priority
-    NULL //task handle
-  );
+  if (tempHumid.initSensor())
+    log_d("Temp-Humidity Sensor Initialized Succesfully");
+  else
+    while (1);
+  
+  semaAqData = xSemaphoreCreateBinary();
+  semaWifi = xSemaphoreCreateBinary();
+
+  xSemaphoreGive(semaAqData);
+  xSemaphoreGive(semaWifi);
+
+  xTaskCreatePinnedToCore(vAcquireData, "Data Acquisition", 6000, NULL, 2, &dataTask, 1);
+  xTaskCreatePinnedToCore(vWifiTransfer, "Transfer data on Wifi", 7000, NULL, 1, &wifiTask, 0);
+
+#ifdef STORE_DATA
+  semaStorage = xSemaphoreCreateBinary();
+  xTaskCreatePinnedToCore(vStorage, "Storage Handler", 6000, NULL, 1, &storageTask, 1);
+#endif
 }
 
-void loop() {
-  // put your main code here, to run repeatedly:
+void loop()
+{
+  vTaskDelay(10);
 }
 
-// put function definitions here:
-int myFunction(int x, int y) {
-  return x + y;
+void vAcquireData(void *parameters)
+{
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+  for (;;)
+  {
+    xSemaphoreTake(semaAqData, portMAX_DELAY);
+
+    // TODO: WHOLE LOGIC HERE
+    if (tempHumid.getData())
+    {
+    }
+    
+    xSemaphoreGive(semaAqData);
+
+    #ifdef STORE_DATA
+      xSemaphoreGive(semaStorage);
+    #endif
+
+    vTaskDelay(1);
+
+    UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+    log_v("Stack usage of Acquisition Task: %d", (int)uxHighWaterMark);
+    vTaskDelayUntil(&xLastWakeTime, DATA_ACQUISITION_TIME);
+  }
 }
 
-void temperature (void * parameters){
-  for(;;)
+void vWifiTransfer(void *parameters)
+{
+  for (;;)
+  {
+    // TODO: WHOLE LOGIC HERE
+
+    UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
+    log_v("Stack usage of WiFi Task: %d", (int)uxHighWaterMark);
+    vTaskDelay(10);
+  }
+}
+
+/*
+void temperature(void *parameters);
+void sound(void *parameters);
+
+void temperature(void *parameters)
+{
+  TickType_t xLastWakeTime = xTaskGetTickCount();
+
+  for (;;)
     Serial.println("Temperature");
     Serial.println(count1++);
-    vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
 
-void sound (void * parameters){
-  for(;;)
+void sound(void *parameters)
+{
+  for (;;)
     Serial.println("Sound");
     Serial.println(count2++);
-    vTaskDelay(1000/portTICK_PERIOD_MS);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
 }
+*/
