@@ -10,13 +10,16 @@ ESP32Time esp_sys_time;
  *
  * @return returns true only if the RTC is initialized properly.
  */
-bool initRTC(){
+bool initRTC()
+{
     configTime(18000, 0, "pool.ntp.org");
-    if(rtc.begin()){
+    if (rtc.begin())
+    {
         log_d("RTC initialization successful");
         return true;
     }
-    else{
+    else
+    {
         log_d("RTC initialization failed");
         return false;
     }
@@ -30,8 +33,11 @@ bool initRTC(){
  *
  * @return returns the time in format "YYYY-MM-DD HH:MM:SS"
  */
-String getTime(){
-    if(time(nullptr) > cutoff_time) { // system time is adjusted
+String getTime()
+{
+    if (time(nullptr) > cutoff_time) // system time is adjusted
+    {
+        log_d("Getting ESP Time");
         tm now = esp_sys_time.getTimeStruct();
         String YYYY = String(now.tm_year+1900, DEC);
         String mm = String(now.tm_mon + 1, DEC);
@@ -46,7 +52,9 @@ String getTime(){
         if (SS.length() == 1){SS = "0" + SS; }
         return  (YYYY + "-" + mm + "-" + dd + " " + HH + ":" + MM + ":" + SS) ;
     }
-    else {
+    else 
+    {
+        log_d("Getting RTC Time");
         DateTime now = rtc.now();
         String YYYY = String(now.year(), DEC);
         String mm = String(now.month(), DEC);
@@ -71,7 +79,9 @@ String getTime(){
  */
 String getDate()
 {
-    if(time(nullptr) > cutoff_time){ //system time is adjusted
+    if (time(nullptr) > cutoff_time) // system time is adjusted
+    {
+        log_d("Getting ESP Time"); 
         tm now = esp_sys_time.getTimeStruct();
         String YYYY = String(now.tm_year+1900, DEC);
         String mm = String(now.tm_mon+1, DEC);
@@ -79,7 +89,10 @@ String getDate()
         String dd = String(now.tm_mday, DEC);
         if (dd.length() == 1){dd = "0" + dd; }
         return YYYY + mm + dd;
-    }  else {
+    }  
+    else 
+    {
+        log_d("Getting RTC Time");
         DateTime now = rtc.now();
         String YYYY = String(now.year(), DEC);
         String mm = String(now.month(), DEC);
@@ -120,6 +133,7 @@ uint32_t getUnixTime()
         return time(nullptr);
     else
     {
+        log_d("Getting RTC Unix Time");
         DateTime now = rtc.now();
         return now.unixtime();
     }

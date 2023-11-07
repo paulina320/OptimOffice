@@ -1,6 +1,8 @@
 #include <Arduino.h>
 #include <FreeRTOS.h>
 #include <Temp_Humid.h>
+#include <ESPWiFi.h>
+#include <rtc.h>
 
 // #define STORE_DATA
 
@@ -19,6 +21,8 @@ void vWifiTransfer(void *pvParameters);
   void vStorage(void *parameters);
 #endif
 
+bool rtc_flag = 0;
+
 void setup()
 {
   Serial.begin(115200);
@@ -26,8 +30,31 @@ void setup()
   if (tempHumid.initSensor())
     log_d("Temp-Humidity Sensor Initialized Succesfully");
   else
+  {
+    log_d("Please Check Connections of Si7021");
     while (1);
-  
+  }
+
+  if (wf.init())
+    log_d("WiFi initialized succesfully");
+  else
+  {
+    log_e("Check Network Connection");
+    while (1)
+    {
+      if (WiFi.isConnected())
+        break;
+    }
+  }
+
+  if (initRTC())
+  {
+    rtc_flag = 1;
+    _set_esp_time();
+  }
+  else
+    rtc_flag = 0;
+
   semaAqData = xSemaphoreCreateBinary();
   semaWifi = xSemaphoreCreateBinary();
 
