@@ -1,13 +1,20 @@
 #include <Arduino.h>
 #include <FreeRTOS.h>
-#include <Temp_Humid.h>
 #include <ESPWiFi.h>
+#include <ESPMQTT.h>
+#include <Temp_Humid.h>
+#include <noise.h>
+#include <Air.h>
 #include <rtc.h>
+#include "ESP32Ping.h"
+#include "defines.h"
+
+const IPAddress remote_ip(8, 8, 8, 8);
 
 // #define STORE_DATA
 
-#define DATA_ACQUISITION_TIME 1000
-#define DATA_STORAGE_TIME 10
+#define DATA_ACQUISITION_TIME 30*1000
+// #define DATA_STORAGE_TIME 10
 
 TaskHandle_t dataTask, wifiTask;
 SemaphoreHandle_t semaAqData, semaWifi;
@@ -21,7 +28,10 @@ void vWifiTransfer(void *pvParameters);
   void vStorage(void *parameters);
 #endif
 
-bool rtc_flag = 0;
+byte flags[9];
+unsigned long lastTimeStamp = getUnixTime();
+float temp_t, humid_t, noise_t, CO2_t;
+int dataparam = 0;
 
 void setup()
 {
@@ -31,7 +41,7 @@ void setup()
     log_d("Temp-Humidity Sensor Initialized Succesfully");
   else
   {
-    log_d("Please Check Connections of Si7021");
+    log_e("Please Check Connections of Si7021");
     while (1);
   }
 
@@ -49,11 +59,13 @@ void setup()
 
   if (initRTC())
   {
-    rtc_flag = 1;
+    flags[rtc_f] = 1;
     _set_esp_time();
   }
   else
-    rtc_flag = 0;
+    flags[rtc_f] = 0;
+
+  noise.initNoise();
 
   semaAqData = xSemaphoreCreateBinary();
   semaWifi = xSemaphoreCreateBinary();
@@ -82,11 +94,24 @@ void vAcquireData(void *parameters)
   {
     xSemaphoreTake(semaAqData, portMAX_DELAY);
 
-    // TODO: WHOLE LOGIC HERE
-    if (tempHumid.getData())
+    if (dataparam == 0)
     {
+      if (tempHumid.getData())
+        dataparam++;
+
+      if (1) // TODO: ADD CO2 READ HERE
+      {
+        air.co2 = 23;
+        dataparam++;
+      }
+
+      noise.readAudio();
+      if (noise.interpretNoise())
+        dataparam++;
+
+      lastTimeStamp = getUnixTime();
     }
-    
+
     xSemaphoreGive(semaAqData);
 
     #ifdef STORE_DATA
@@ -105,33 +130,79 @@ void vWifiTransfer(void *parameters)
 {
   for (;;)
   {
-    // TODO: WHOLE LOGIC HERE
+    if (dataparam > 1)
+    {
+      xSemaphoreTake(semaWifi, portMAX_DELAY);
+      xSemaphoreTake(semaAqData, portMAX_DELAY);
+      log_v("Entering WiFi Task");
+      {
+        if (tempHumid.temp != 0)
+          temp_t = tempHumid.temp;
+        if (tempHumid.humid != 0)
+          humid_t = tempHumid.humid;
+        if (noise.lastNoiseValue != 0)
+          noise_t = noise.lastNoiseValue;
+        if (tempHumid.temp != 0)
+          CO2_t = air.co2;
+        dataparam = 0;
+      }
+      xSemaphoreGive(semaAqData);
+      
+      if (wf.check_connection())
+      {
+        if (Ping.ping(remote_ip,1))
+        {
+          if (!flags[cloud_f] && !flags[cloud_setup_f])
+          {
+            initCloud();
+            log_d("Cloud IoT Setup Complete");
+            flags[cloud_setup_f] = 1;
+          }
+
+          ubidots.loop();
+
+          if (!ubidots.connected())
+          {
+            flags[cloud_f] = 0;
+            ubidots.reconnect();
+          }
+          if (ubidots.connected())
+          {
+            if (!noise_t && !temp_t && !humid_t && CO2_t)
+            {
+              flags[cloud_f] = 1;
+              ubidots.add("NoiseLevel", noise_t, NULL, lastTimeStamp); // Insert your variable Labels and the value to be sent
+              ubidots.add("TemperatureLevel", temp_t, NULL, lastTimeStamp);
+              ubidots.add("Humidity", humid_t, NULL, lastTimeStamp);
+              ubidots.add("CO2", CO2_t, NULL, lastTimeStamp);
+              ubidots.publish(DEVICE_LABEL);
+              log_d("sent data to cloud ");
+
+              temp_t = 0;
+              humid_t = 0;
+              noise_t = 0;
+              CO2_t = 0;
+            }
+          }
+        }
+        else
+        {
+          log_d("Ping Not Received");
+          flags[cloud_f] = 0;
+        }
+        xSemaphoreGive(semaWifi);
+      }
+      else
+      {
+        log_i("Wifi disconnected!");
+        flags[cloud_f] = 0;
+        xSemaphoreGive(semaWifi);
+        vTaskDelay(10000);
+      }
+    }
 
     UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
     log_v("Stack usage of WiFi Task: %d", (int)uxHighWaterMark);
     vTaskDelay(10);
   }
 }
-
-/*
-void temperature(void *parameters);
-void sound(void *parameters);
-
-void temperature(void *parameters)
-{
-  TickType_t xLastWakeTime = xTaskGetTickCount();
-
-  for (;;)
-    Serial.println("Temperature");
-    Serial.println(count1++);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-}
-
-void sound(void *parameters)
-{
-  for (;;)
-    Serial.println("Sound");
-    Serial.println(count2++);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-}
-*/

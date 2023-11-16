@@ -1,7 +1,7 @@
 #ifndef __ESPWIFI_H__
 #define __ESPWIFI_H__
-#include <WiFi.h>
 #include <Arduino.h>
+#include <WiFi.h>
 
 #define WIFI_SSID "OptimOffice"
 #define WIFI_PASS "12344321"
