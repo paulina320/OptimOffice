@@ -12,7 +12,7 @@ ESP32Time esp_sys_time;
  */
 bool initRTC()
 {
-    configTime(18000, 0, "pool.ntp.org");
+    configTime(7200, 0, "pool.ntp.org");
     if (rtc.begin())
     {
         log_d("RTC initialization successful");

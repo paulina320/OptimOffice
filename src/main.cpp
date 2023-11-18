@@ -1,13 +1,20 @@
 #include <Arduino.h>
 #include <FreeRTOS.h>
-#include <Temp_Humid.h>
 #include <ESPWiFi.h>
+#include <ESPMQTT.h>
+#include <Temp_Humid.h>
+#include <noise.h>
+#include <Air.h>
 #include <rtc.h>
+#include "ESP32Ping.h"
+#include "defines.h"
+
+const IPAddress remote_ip(8, 8, 8, 8);
 
 // #define STORE_DATA
 
-#define DATA_ACQUISITION_TIME 1000
-#define DATA_STORAGE_TIME 10
+#define DATA_ACQUISITION_TIME 30*1000
+// #define DATA_STORAGE_TIME 10
 
 TaskHandle_t dataTask, wifiTask;
 SemaphoreHandle_t semaAqData, semaWifi;
@@ -21,39 +28,59 @@ void vWifiTransfer(void *pvParameters);
   void vStorage(void *parameters);
 #endif
 
-bool rtc_flag = 0;
+byte flags[8];
+unsigned long lastTimeStamp = 0;
+float temp_t, humid_t, noise_t, CO2_t, TVOC_t = 0;
+int dataparam = 0;
 
 void setup()
 {
   Serial.begin(115200);
 
-  if (tempHumid.initSensor())
-    log_d("Temp-Humidity Sensor Initialized Succesfully");
-  else
-  {
-    log_d("Please Check Connections of Si7021");
-    while (1);
+  //* Si7021 Initialization
+  { // TODO: Remove these comments for actual sensor
+    // if (tempHumid.initSensor())
+    //   log_d("Temp-Humidity Sensor Initialized Succesfully");
+    // else
+    // {
+    //   log_e("Please Check Connections of Si7021");
+    //   while (1);
+    // }
   }
 
-  if (wf.init())
-    log_d("WiFi initialized succesfully");
-  else
+  //* Wi-Fi Initialization and Connection
   {
-    log_e("Check Network Connection");
-    while (1)
+    if (wf.init())
+      log_d("WiFi initialized succesfully");
+    else
     {
-      if (WiFi.isConnected())
-        break;
+      log_e("Check Network Connection");
+      while (1)
+      {
+        if (WiFi.isConnected())
+        {
+          initCloud();
+          log_d("Cloud IoT Setup Complete");
+          flags[cloud_setup_f] = 1;
+          if (ubidots.connected())
+            flags[cloud_f] = 1;
+          break;
+        }
+      }
     }
+    delay(100);
   }
 
-  if (initRTC())
+  //* RTC Initialization
   {
-    rtc_flag = 1;
-    _set_esp_time();
+    if (initRTC())
+    {
+      flags[rtc_f] = 1;
+      _set_esp_time();
+    }
+    else
+      flags[rtc_f] = 0;
   }
-  else
-    rtc_flag = 0;
 
   semaAqData = xSemaphoreCreateBinary();
   semaWifi = xSemaphoreCreateBinary();
@@ -82,11 +109,30 @@ void vAcquireData(void *parameters)
   {
     xSemaphoreTake(semaAqData, portMAX_DELAY);
 
-    // TODO: WHOLE LOGIC HERE
-    if (tempHumid.getData())
+    if (dataparam == 0)
     {
+      if (1)
+      {
+        tempHumid.temp = 23;
+        tempHumid.humid = 54;
+        dataparam++;
+      }
+
+      // if (tempHumid.getData()) // TODO: Remove this comment for actual sensor
+      {
+        air.tvoc = float(random(200,220))/1000;
+        air.co2 = random(420,440);
+        dataparam++;
+      }
+
+      noise.readAudio();
+      if (noise.interpretNoise())
+        dataparam++;
+
+      lastTimeStamp = getUnixTime();
+      log_d("Data captured at %s", getTime().c_str());
     }
-    
+
     xSemaphoreGive(semaAqData);
 
     #ifdef STORE_DATA
@@ -105,33 +151,86 @@ void vWifiTransfer(void *parameters)
 {
   for (;;)
   {
-    // TODO: WHOLE LOGIC HERE
+    if (dataparam > 1)
+    {
+      log_d("Entering WiFi Task");
+      xSemaphoreTake(semaWifi, portMAX_DELAY);
+      xSemaphoreTake(semaAqData, portMAX_DELAY);
+      {
+        if (tempHumid.temp != 0)
+          temp_t = tempHumid.temp;
+        if (tempHumid.humid != 0)
+          humid_t = tempHumid.humid;
+        if (noise.lastNoiseValue != 0)
+          noise_t = noise.lastNoiseValue;
+        if (air.co2 != 0)
+          CO2_t = air.co2;
+        if (air.tvoc != 0)
+          TVOC_t = air.tvoc;
+        dataparam = 0;
+        log_d("Fetched Data for Transmission");
+      }
+      xSemaphoreGive(semaAqData);
+      
+      if (wf.check_connection())
+      {
+        // if (Ping.ping(remote_ip,1))
+        {
+          if (!flags[cloud_f] && !flags[cloud_setup_f])
+          {
+            initCloud();
+            log_d("Cloud IoT Setup Complete");
+            flags[cloud_setup_f] = 1;
+          }
+
+          ubidots.loop();
+
+          if (!ubidots.connected())
+          {
+            flags[cloud_f] = 0;
+            ubidots.reconnect();
+          }
+          if (ubidots.connected())
+          {
+            // if (!noise_t && !temp_t && !humid_t && CO2_t)
+            {
+              flags[cloud_f] = 1;
+
+              ubidots.add("TemperatureLevel", temp_t);
+              ubidots.add("Humidity", humid_t);
+              ubidots.add("NoiseLevel", noise_t);
+              ubidots.add("CO2", CO2_t);
+              ubidots.add("TVOC", TVOC_t);
+
+              ubidots.publish(DEVICE_LABEL);
+              log_d("Sent data to cloud");
+              log_v("DATA SENT: Temp=%.2fC, Humid=%.2f%%, Noise=%.2fdB, CO2=%.0fppm, TVOC=%.2fppm", temp_t, humid_t, noise_t, CO2_t, TVOC_t);
+
+              temp_t = 0;
+              humid_t = 0;
+              noise_t = 0;
+              CO2_t = 0;
+            }
+          }
+        }
+        // else
+        // {
+        //   log_d("Ping Not Received");
+        //   flags[cloud_f] = 0;
+        // }
+        xSemaphoreGive(semaWifi);
+      }
+      else
+      {
+        log_i("Wifi disconnected!");
+        flags[cloud_f] = 0;
+        xSemaphoreGive(semaWifi);
+        vTaskDelay(10000);
+      }
+    }
 
     UBaseType_t uxHighWaterMark = uxTaskGetStackHighWaterMark(NULL);
     log_v("Stack usage of WiFi Task: %d", (int)uxHighWaterMark);
-    vTaskDelay(10);
+    vTaskDelay(1000);
   }
 }
-
-/*
-void temperature(void *parameters);
-void sound(void *parameters);
-
-void temperature(void *parameters)
-{
-  TickType_t xLastWakeTime = xTaskGetTickCount();
-
-  for (;;)
-    Serial.println("Temperature");
-    Serial.println(count1++);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-}
-
-void sound(void *parameters)
-{
-  for (;;)
-    Serial.println("Sound");
-    Serial.println(count2++);
-    vTaskDelay(1000 / portTICK_PERIOD_MS);
-}
-*/
