@@ -33,8 +33,23 @@ unsigned int Noise::readNoise(void)
     if ((millis() - noiseSignalMillis) > NOISEAVG_FREQUENCY) // triggers the routine every 5 seconds
     {
         audioSignalAVG = audioSignalAVG/audioSignalCount;
-        lastNoiseValue = map(audioSignalAVG,400,1200,20,93);             //calibrate for deciBels
-        Serial.println(lastNoiseValue,DEC);                        //print the average sound value to serial
+        //lastNoiseValue = map(audioSignalAVG,400,1200,20,93);             //calibrate for deciBels
+        if(audioSignalAVG < 410){
+          lastNoiseValue = map(audioSignalAVG,405,410,32,42);
+        }
+        else if(audioSignalAVG < 422){
+          lastNoiseValue = map(audioSignalAVG,410,422,42,50);
+        }
+        else if(audioSignalAVG < 537){
+          lastNoiseValue = map(audioSignalAVG,422,537,50,60);
+        }
+        else if(audioSignalAVG < 790){
+          lastNoiseValue = map(audioSignalAVG,537,790,60,70);
+        }
+        else{
+          lastNoiseValue = map(audioSignalAVG,790,1100,70,79);
+        }
+        //Serial.println(lastNoiseValue,DEC);                        //print the average sound value to serial
         audioSignalAVG = 0;
         audioSignalCount = 0;
         noiseSignalMillis = millis();
