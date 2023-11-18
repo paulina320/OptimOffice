@@ -1,16 +1,5 @@
 #include <Arduino.h>
-#include <Wire.h>
-#include <Adafruit_ADS1X15.h>
 #include <noise.h>
-
-Adafruit_ADS1115 ads1115;
-
-void Noise::initNoise(void)
-{
-  Serial.println("Getting single-ended readings from AIN0..3");
-  Serial.println("ADC Range: +/- 6.144V (1 bit = 3mV)");
-  ads1115.begin();
-}
 
 void Noise::readAudio()
 {
@@ -20,10 +9,10 @@ void Noise::readAudio()
   unsigned int signalMax = 0;    // minimum value
   unsigned int signalMin = 1024; // maximum value
 
-  // collect data for 50 mS
+  // collect data for sampleWindow mS
   while (millis() - startMillis < sampleWindow)
   {
-    sample = ads1115.readADC_SingleEnded(0); // get reading from microphone
+    sample = analogRead(micPin); // get reading from microphone
 
     if (sample > signalMax)
       signalMax = sample; // save just the max levels
@@ -37,10 +26,13 @@ void Noise::readAudio()
 
 bool Noise::interpretNoise(void)
 {
-  if ((millis() - noiseSignalMillis) > NOISEAVG_FREQUENCY) // triggers the routine every 5 seconds
+  if (((millis() - noiseSignalMillis) > NOISEAVG_FREQUENCY) || isboot) // triggers the routine every 5 seconds
   {
+    if (isboot)
+      isboot = false;
     audioSignalAVG = audioSignalAVG / audioSignalCount;
     lastNoiseValue = map(audioSignalAVG, 400, 1200, 20, 93); // calibrate for deciBels
+    log_v("Noise: %.2f\n", lastNoiseValue);                    // print the average sound value to serial
     audioSignalAVG = 0;
     audioSignalCount = 0;
     noiseSignalMillis = millis();

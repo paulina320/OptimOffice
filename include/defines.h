@@ -7,13 +7,12 @@ enum flags_
     temp_humid_f,
     sound_f,
     ccs_f,
-    adc_f,
     acq,
     cloud_f,
     cloud_setup_f,
     rtc_f,
     sd_f
 };
-extern byte flags[9];
+extern byte flags[8];
 
 #endif
