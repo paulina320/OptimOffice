@@ -32,22 +32,18 @@ bool Noise::interpretNoise(void)
       isboot = false;
     audioSignalAVG = audioSignalAVG / audioSignalCount;
     //lastNoiseValue = map(audioSignalAVG, 400, 1200, 20, 93); // calibrate for deciBels
-    if(audioSignalAVG < 410){
+    if(audioSignalAVG < 410)
       lastNoiseValue = map(audioSignalAVG,405,410,32,42);
-    }
-    else if(audioSignalAVG < 422){
+    else if(audioSignalAVG < 422)
       lastNoiseValue = map(audioSignalAVG,410,422,42,50);
-    }
-    else if(audioSignalAVG < 537){
+    else if(audioSignalAVG < 537)
       lastNoiseValue = map(audioSignalAVG,422,537,50,60);
-    }
-    else if(audioSignalAVG < 790){
+    else if(audioSignalAVG < 790)
       lastNoiseValue = map(audioSignalAVG,537,790,60,70);
-    }
-    else{
+    else
       lastNoiseValue = map(audioSignalAVG,790,1100,70,79);
-    }
-    log_v("Noise: %.2f\n", lastNoiseValue);                    // print the average sound value to serial
+    
+    log_v("Noise: %.2f\n", lastNoiseValue);
     audioSignalAVG = 0;
     audioSignalCount = 0;
     noiseSignalMillis = millis();
