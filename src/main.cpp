@@ -38,14 +38,14 @@ void setup()
   Serial.begin(115200);
 
   //* Si7021 Initialization
-  { // TODO: Remove these comments for actual sensor
-    // if (tempHumid.initSensor())
-    //   log_d("Temp-Humidity Sensor Initialized Succesfully");
-    // else
-    // {
-    //   log_e("Please Check Connections of Si7021");
-    //   while (1);
-    // }
+  {
+    if (tempHumid.initSensor())
+      log_d("Temp-Humidity Sensor Initialized Succesfully");
+    else
+    {
+      log_e("Please Check Connections of Si7021");
+      while (1);
+    }
   }
 
   //* Wi-Fi Initialization and Connection
@@ -111,14 +111,10 @@ void vAcquireData(void *parameters)
 
     if (dataparam == 0)
     {
-      if (1)
-      {
-        tempHumid.temp = 23;
-        tempHumid.humid = 54;
+      if (tempHumid.getData())
         dataparam++;
-      }
 
-      // if (tempHumid.getData()) // TODO: Remove this comment for actual sensor
+      // if (air.getData()) // TODO: Remove this comment for actual sensor
       {
         air.tvoc = float(random(200,220))/1000;
         air.co2 = random(420,440);
@@ -130,7 +126,7 @@ void vAcquireData(void *parameters)
         dataparam++;
 
       lastTimeStamp = getUnixTime();
-      log_d("Data captured at %s", getTime().c_str());
+      log_i("Data captured at %s", getTime().c_str());
     }
 
     xSemaphoreGive(semaAqData);
@@ -204,7 +200,7 @@ void vWifiTransfer(void *parameters)
 
               ubidots.publish(DEVICE_LABEL);
               log_d("Sent data to cloud");
-              log_d("DATA SENT: Temp=%.2fC, Humid=%.2f%%, Noise=%.2fdB, CO2=%.0fppm, TVOC=%.2fppm\n", temp_t, humid_t, noise_t, CO2_t, TVOC_t);
+              log_i("DATA SENT: Temp=%.2fC, Humid=%.2f%%, Noise=%.2fdB, CO2=%.0fppm, TVOC=%.2fppm\n", temp_t, humid_t, noise_t, CO2_t, TVOC_t);
 
               temp_t = 0;
               humid_t = 0;

@@ -155,7 +155,7 @@ void _set_esp_time(){
  * @param void
  */
 void setRtcTime(){
-    log_i("Set RTC time");
+    log_d("Setting RTC time");
     tm now = esp_sys_time.getTimeStruct();
     rtc.adjust(DateTime(now.tm_year + 1900, now.tm_mon + 1, now.tm_mday, now.tm_hour, now.tm_min, now.tm_sec));
 }

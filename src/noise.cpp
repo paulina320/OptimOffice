@@ -43,7 +43,7 @@ bool Noise::interpretNoise(void)
     else
       lastNoiseValue = map(audioSignalAVG,790,1100,70,79);
     
-    log_v("Noise: %.2f\n", lastNoiseValue);
+    log_d("Noise: %.2f\n", lastNoiseValue);
     audioSignalAVG = 0;
     audioSignalCount = 0;
     noiseSignalMillis = millis();
