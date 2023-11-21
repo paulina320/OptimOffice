@@ -205,7 +205,7 @@ void vWifiTransfer(void *parameters)
 
               ubidots.publish(DEVICE_LABEL);
               log_d("Sent data to cloud");
-              log_i("DATA SENT: Temp=%.2fC, Humid=%.2f%%, Noise=%.2fdB, CO2=%.0fppm, TVOC=%.2fppm\n", temp_t, humid_t, noise_t, CO2_t, TVOC_t);
+              log_i("DATA SENT: Temp=%.2fC, Humid=%.2f%%, Noise=%.2fdB, CO2=%.0fppm, TVOC=%.0fppb\n", temp_t, humid_t, noise_t, CO2_t, TVOC_t);
 
               temp_t = 0;
               humid_t = 0;
