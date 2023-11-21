@@ -48,6 +48,15 @@ void setup()
     }
   }
 
+  //* CCS811 Initialization
+  if (air.initSensor())
+    flags[ccs_f] = 1;
+  else
+  {
+    log_e("Please Check Connections of CCS811");
+    while (1);
+  }                
+
   //* Wi-Fi Initialization and Connection
   {
     if (wf.init())
@@ -114,12 +123,8 @@ void vAcquireData(void *parameters)
       if (tempHumid.getData())
         dataparam++;
 
-      // if (air.getData()) // TODO: Remove this comment for actual sensor
-      {
-        air.tvoc = float(random(200,220))/1000;
-        air.co2 = random(420,440);
+      if (air.getData()) // TODO: Remove this comment for actual sensor
         dataparam++;
-      }
 
       noise.readAudio();
       if (noise.interpretNoise())
